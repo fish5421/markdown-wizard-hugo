@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Markdown Table Wizard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.0.2/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #3498db;
+            --secondary-color: #2ecc71;
+            --background-color: #f5f7fa;
+            --text-color: #34495e;
+            --border-color: #bdc3c7;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background-color: var(--background-color);
+            margin: 0;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+        }
+        
+        h1 {
+            color: var(--primary-color);
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .intro {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .editor-container {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .editor-column {
+            flex: 1;
+        }
+        
+        textarea, .preview-container {
+            width: 100%;
+            height: 300px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 10px;
+            font-family: monospace;
+            resize: vertical;
+        }
+        
+        .preview-container {
+            overflow-y: auto;
+            background-color: white;
+        }
+        
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        
+        button:hover {
+            background-color: #2980b9;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        
+        th, td {
+            border: 1px solid var(--border-color);
+            padding: 8px;
+            text-align: left;
+        }
+        
+        th {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .editable:hover {
+            background-color: #f0f0f0;
+            cursor: pointer;
+        }
+        
+        .tooltip {
+            position: relative;
+            display: inline-block;
+            cursor: help;
+        }
+        
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 200px;
+            background-color: #555;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -100px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Markdown Table Wizard 🧙‍♂️</h1>
+        <div class="intro">
+            <p>Welcome to the Markdown Table Wizard! This tool helps you create, edit, and visualize Markdown tables with ease.</p>
+            <p>Simply paste your Markdown table or start from scratch, then use the buttons below to transform your table. When you're done, you can download your Markdown table as a file.</p>
+        </div>
+        <div class="editor-container">
+            <div class="editor-column">
+                <h2>Markdown Input</h2>
+                <textarea id="markdownInput" placeholder="Enter your Markdown table here..."></textarea>
+            </div>
+            <div class="editor-column">
+                <h2>Live Preview</h2>
+                <div id="previewContainer" class="preview-container"></div>
+            </div>
+        </div>
+        <div class="button-group">
+            <button onclick="renderTable()" class="tooltip">Render Table
+                <span class="tooltiptext">Convert Markdown to an editable HTML table</span>
+            </button>
+            <button onclick="updateMarkdown()" class="tooltip">Update Markdown
+                <span class="tooltiptext">Convert the edited HTML table back to Markdown</span>
+            </button>
+            <button onclick="addRow()" class="tooltip">Add Row
+                <span class="tooltiptext">Add a new row to the table</span>
+            </button>
+            <button onclick="addColumn()" class="tooltip">Add Column
+                <span class="tooltiptext">Add a new column to the table</span>
+            </button>
+            <button onclick="downloadMarkdown()" class="tooltip">Download
+                <span class="tooltiptext">Download your Markdown table as a file</span>
+            </button>
+        </div>
+        <div id="tableContainer"></div>
+    </div>
+
+    <script>
+        const markdownInput = document.getElementById('markdownInput');
+        const tableContainer = document.getElementById('tableContainer');
+        const previewContainer = document.getElementById('previewContainer');
+
+        function renderTable() {
+            const markdown = markdownInput.value;
+            const html = marked.parse(markdown);
+            tableContainer.innerHTML = html;
+            
+            const cells = tableContainer.querySelectorAll('td, th');
+            cells.forEach(cell => {
+                cell.contentEditable = true;
+                cell.classList.add('editable');
+                cell.addEventListener('blur', () => updatePreview());
+            });
+            
+            updatePreview();
+        }
+
+        function updateMarkdown() {
+            const table = tableContainer.querySelector('table');
+            if (!table) return;
+
+            let markdown = '| ';
+            const headers = table.querySelectorAll('th');
+            headers.forEach((header, index) => {
+                markdown += header.textContent.trim() + ' |' + (index === headers.length - 1 ? '\n' : ' ');
+            });
+
+            markdown += '| ' + '--- |'.repeat(headers.length) + '\n';
+
+            const rows = table.querySelectorAll('tr');
+            rows.forEach((row, rowIndex) => {
+                if (rowIndex === 0) return;
+                markdown += '| ';
+                const cells = row.querySelectorAll('td');
+                cells.forEach((cell, cellIndex) => {
+                    markdown += cell.textContent.trim() + ' |' + (cellIndex === cells.length - 1 ? '\n' : ' ');
+                });
+            });
+
+            markdownInput.value = markdown;
+            updatePreview();
+        }
+
+        function updatePreview() {
+            const markdown = markdownInput.value;
+            const html = marked.parse(markdown);
+            previewContainer.innerHTML = html;
+        }
+
+        function addRow() {
+            const table = tableContainer.querySelector('table');
+            if (!table) return;
+
+            const newRow = table.insertRow(-1);
+            const columnCount = table.rows[0].cells.length;
+
+            for (let i = 0; i < columnCount; i++) {
+                const cell = newRow.insertCell(i);
+                cell.contentEditable = true;
+                cell.classList.add('editable');
+                cell.addEventListener('blur', () => updatePreview());
+            }
+
+            updateMarkdown();
+        }
+
+        function addColumn() {
+            const table = tableContainer.querySelector('table');
+            if (!table) return;
+
+            const rows = table.rows;
+            for (let i = 0; i < rows.length; i++) {
+                const cell = rows[i].insertCell(-1);
+                cell.contentEditable = true;
+                cell.classList.add('editable');
+                cell.addEventListener('blur', () => updatePreview());
+                if (i === 0) {
+                    cell.outerHTML = cell.outerHTML.replace('<td', '<th');
+                }
+            }
+
+            updateMarkdown();
+        }
+
+        function downloadMarkdown() {
+            const markdown = markdownInput.value;
+            const blob = new Blob([markdown], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'markdown_table.md';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        markdownInput.addEventListener('input', _.debounce(updatePreview, 300));
+
+        // Initialize with a sample table
+        markdownInput.value = `| Header 1 | Header 2 | Header 3 |\n|----------|----------|----------|\n| Row 1, Col 1 | Row 1, Col 2 | Row 1, Col 3 |\n| Row 2, Col 1 | Row 2, Col 2 | Row 2, Col 3 |`;
+        renderTable();
+    </script>
+</body>
+</html>
